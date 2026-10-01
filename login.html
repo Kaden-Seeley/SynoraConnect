@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<title>Log In | SynoraConnect</title>
+		<meta name="description" content="Log in to your SynoraConnect account.">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="styles.css">
+	</head>
+<body class="auth-page">
+	<div class="navbar">
+		<div class="site-info">
+			<span class="logo logo-mark" aria-hidden="true">S</span>
+			<p class="site-name">Synora</p>
+		</div>
+		<a class="default-button" href="index.html">Home</a>
+		<a class="default-button" href="signup.html">Sign Up</a>
+	</div>
+
+	<main class="auth-main">
+		<section class="auth-card" aria-labelledby="auth-title">
+			<p class="auth-eyebrow">WELCOME BACK</p>
+			<h1 id="auth-title">Log in to your account</h1>
+			<p class="auth-description">Pick up right where you left off.</p>
+
+			<form class="auth-form" data-auth-form="login">
+				<label for="login-identifier">Username or email</label>
+				<input id="login-identifier" name="identifier" type="text" autocomplete="username" required placeholder="Username or email">
+
+				<label for="login-password">Password</label>
+				<input id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password">
+
+				<div class="auth-options">
+					<label class="remember-option" for="remember-me">
+						<input id="remember-me" name="remember" type="checkbox">
+						<span>Remember me</span>
+					</label>
+					<span class="auth-muted">Use your username or email</span>
+				</div>
+
+				<p class="form-status" data-form-status role="status" aria-live="polite"></p>
+				<button class="auth-submit" type="submit">Log In</button>
+			</form>
+
+			<p class="auth-switch">New here? <a href="signup.html">Create an account</a></p>
+		</section>
+	</main>
+
+	<div class="background-animations" aria-hidden="true">
+		<div></div>
+	</div>
+
+	<script src="script.js" async defer></script>
+</body>
+</html>

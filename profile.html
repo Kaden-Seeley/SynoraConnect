@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Your Profile | SynoraConnect</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body class="profile-page auth-page">
+		<nav class="navbar chat-navbar" aria-label="Main navigation">
+			<div class="site-info">
+				<span class="logo logo-mark" aria-hidden="true">S</span>
+				<p class="site-name">Synora</p>
+			</div>
+			<div class="chat-identity">Signed in as <strong data-current-username></strong></div>
+			<a class="default-button profile-link" href="chat.html">Back to chat</a>
+		</nav>
+
+		<main class="profile-main">
+			<section class="profile-editor" aria-labelledby="profile-title">
+				<p class="auth-eyebrow">YOUR ACCOUNT</p>
+				<h1 id="profile-title">Customize your profile</h1>
+				<p class="auth-description">Choose how you appear in the community.</p>
+
+				<div class="verification-card">
+					<div>
+						<strong data-verification-state>Email status</strong>
+						<p>Account email: <span data-profile-email></span></p>
+					</div>
+					<button class="secondary-action" type="button" data-resend-verification>Send verification link</button>
+				</div>
+
+				<form class="profile-form" data-profile-form>
+					<div class="profile-photo-editor">
+						<div class="avatar avatar-profile" data-profile-avatar>
+							<span data-avatar-fallback></span>
+							<img alt="Profile photo preview">
+						</div>
+						<div class="photo-controls">
+							<label class="file-action" for="profile-avatar">Choose photo</label>
+							<input class="visually-hidden" id="profile-avatar" name="avatar" type="file" accept="image/png,image/jpeg,image/webp">
+							<button class="text-action" type="button" data-remove-picture>Remove photo</button>
+							<p data-photo-guidance>Photos appear after email verification and one day of account age.</p>
+						</div>
+					</div>
+
+					<label for="profile-bio">Bio</label>
+					<textarea id="profile-bio" name="bio" maxlength="500" rows="5" placeholder="A little about you..."></textarea>
+					<div class="profile-form-footer">
+						<p class="profile-status" data-profile-status role="status" aria-live="polite"></p>
+						<button class="auth-submit profile-save" type="submit">Save profile</button>
+					</div>
+				</form>
+			</section>
+		</main>
+		<div class="background-animations" aria-hidden="true"><div></div></div>
+		<script src="script.js" defer></script>
+	</body>
+</html>

@@ -1,0 +1,24 @@
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+
+# Accounts, messages, sessions, and local database sidecars
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# User-uploaded profile images are private app data
+assets/profile-pictures/
+
+# Python-generated files and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local machine files and logs
+.DS_Store
+*.log

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Community Chat | SynoraConnect</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="styles.css">
+	</head>
+	<body class="chat-page">
+		<nav class="navbar chat-navbar" aria-label="Main navigation">
+			<div class="site-info">
+				<span class="logo logo-mark" aria-hidden="true">S</span>
+				<p class="site-name">Synora</p>
+			</div>
+			<div class="chat-identity">Signed in as <strong data-current-username></strong></div>
+			<a class="default-button profile-link" href="profile.html">My profile</a>
+			<button class="default-button logout-button" type="button" data-logout>Log out</button>
+		</nav>
+
+		<main class="chat-layout">
+			<header class="chat-heading">
+				<div>
+					<p>COMMUNITY CHAT</p>
+					<h1>Good to see you, <span data-welcome-username></span></h1>
+				</div>
+			</header>
+
+			<div class="chat-columns">
+				<aside class="rooms-panel" aria-label="Chat rooms">
+					<div class="rooms-heading">
+						<p>YOUR SPACE</p>
+						<h2>Channels</h2>
+					</div>
+					<nav class="room-groups" data-room-groups aria-label="Choose a chat room"></nav>
+				</aside>
+
+				<section class="chat-panel" aria-label="Community messages">
+					<div class="chat-panel-header"><span class="online-dot" aria-hidden="true"></span><span data-active-room>Everyone</span></div>
+					<div class="message-list" data-message-list aria-live="polite" aria-relevant="additions"></div>
+					<div class="chat-compose">
+						<form data-chat-form>
+							<textarea name="message" maxlength="2000" rows="1" aria-label="Write a message" placeholder="Write a message..." required></textarea>
+							<button class="chat-send" type="submit">Send</button>
+						</form>
+						<p class="chat-status" data-chat-status role="status" aria-live="polite"></p>
+					</div>
+				</section>
+
+				<aside class="online-panel" aria-label="Online users">
+					<div class="chat-panel-header"><span class="online-dot" aria-hidden="true"></span><span>Online</span><span class="online-count" data-online-count>0</span></div>
+					<div class="online-list" data-online-list></div>
+					<p class="online-status" data-online-status role="status" aria-live="polite"></p>
+				</aside>
+			</div>
+		</main>
+
+		<section class="admin-console" data-admin-console hidden aria-label="Admin moderation console"></section>
+
+		<div class="profile-overlay" data-profile-overlay hidden>
+			<section class="profile-preview" role="dialog" aria-modal="true" aria-labelledby="preview-username">
+				<button class="preview-close" type="button" data-preview-close aria-label="Close profile preview">×</button>
+				<div class="preview-identity">
+					<div class="avatar avatar-large">
+						<span data-preview-fallback></span>
+						<img data-preview-avatar alt="">
+					</div>
+					<div><p class="preview-eyebrow">COMMUNITY MEMBER</p><h2 id="preview-username" data-preview-username></h2><p class="preview-role" data-preview-role hidden></p></div>
+				</div>
+				<p class="preview-bio" data-preview-bio></p>
+				<div class="preview-stats">
+					<div><span>Messages sent</span><strong data-preview-message-count></strong></div>
+					<div><span>Joined</span><strong data-preview-joined></strong></div>
+				</div>
+			</section>
+		</div>
+
+		<div class="background-animations" aria-hidden="true"><div></div></div>
+		<script src="script.js" defer></script>
+	</body>
+</html>

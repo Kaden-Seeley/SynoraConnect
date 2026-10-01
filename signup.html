@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<title>Sign Up | SynoraConnect</title>
+		<meta name="description" content="Create a SynoraConnect account.">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="styles.css">
+	</head>
+<body class="auth-page">
+	<div class="navbar">
+		<div class="site-info">
+			<span class="logo logo-mark" aria-hidden="true">S</span>
+			<p class="site-name">Synora</p>
+		</div>
+		<a class="default-button" href="index.html">Home</a>
+		<a class="default-button" href="login.html">Log In</a>
+	</div>
+
+	<main class="auth-main">
+		<section class="auth-card" aria-labelledby="auth-title">
+			<p class="auth-eyebrow">GET STARTED</p>
+			<h1 id="auth-title">Create your account</h1>
+			<p class="auth-description">A few details and you’re ready to go.</p>
+
+			<form class="auth-form" data-auth-form="signup">
+				<label for="signup-username">Username</label>
+				<input id="signup-username" name="username" type="text" autocomplete="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" required placeholder="Choose a username">
+
+				<label for="signup-email">Email address</label>
+				<input id="signup-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+
+				<label for="signup-password">Password</label>
+				<input id="signup-password" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required placeholder="Create a password">
+
+				<p class="form-status" data-form-status role="status" aria-live="polite"></p>
+				<button class="auth-submit" type="submit">Create Account</button>
+			</form>
+
+			<p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+		</section>
+	</main>
+
+	<div class="background-animations" aria-hidden="true">
+		<div></div>
+	</div>
+
+	<script src="script.js" async defer></script>
+</body>
+</html>
