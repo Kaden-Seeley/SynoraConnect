@@ -39,26 +39,10 @@ document.querySelectorAll("[data-auth-form]").forEach((form) => {
         button.disabled = true;
 
         try {
-            const result = await requestJson(`/api/${form.dataset.authForm}`, {
+            await requestJson(`/api/${form.dataset.authForm}`, {
                 method: "POST",
                 body: JSON.stringify(payload),
             });
-            if (form.dataset.authForm === "signup") {
-                status.textContent = result.verification_delivery === "sent"
-                    ? "Account created. Check your inbox to verify your email. "
-                    : "Account created. Verify your email to unlock profile photos. ";
-                if (result.verification_url) {
-                    const verificationLink = document.createElement("a");
-                    verificationLink.href = result.verification_url;
-                    verificationLink.textContent = "Verify email";
-                    status.append(verificationLink, document.createTextNode(" · "));
-                }
-                const chatLink = document.createElement("a");
-                chatLink.href = "chat.html";
-                chatLink.textContent = "Continue to chat";
-                status.append(chatLink);
-                return;
-            }
             window.location.assign("chat.html");
         } catch (error) {
             status.textContent = error.message;
@@ -78,13 +62,6 @@ function setAvatar(wrapper, profile) {
     image.src = profile.avatar_url || "assets/profile-placeholder.png";
 }
 
-function appendLink(container, href, label) {
-    const link = document.createElement("a");
-    link.href = href;
-    link.textContent = label;
-    container.append(document.createTextNode(" "), link);
-}
-
 const profileForm = document.querySelector("[data-profile-form]");
 if (profileForm) {
     const profileStatus = document.querySelector("[data-profile-status]");
@@ -102,13 +79,14 @@ if (profileForm) {
             profileForm.elements.bio.value = profile.bio;
             document.querySelector("[data-profile-email]").textContent = result.email;
             setAvatar(profileAvatar, profile);
+            fileInput.disabled = !profile.photo_eligible;
+            profileForm.querySelector(`label[for="${fileInput.id}"]`).setAttribute(
+                "aria-disabled",
+                String(!profile.photo_eligible),
+            );
             document.querySelector("[data-photo-guidance]").textContent = profile.photo_eligible
                 ? "Your profile photo is eligible to appear to other members."
-                : "Profile photos appear after your email is verified and your account is at least one day old.";
-            document.querySelector("[data-verification-state]").textContent = profile.email_verified
-                ? "Email verified"
-                : "Email not verified";
-            document.querySelector("[data-resend-verification]").hidden = profile.email_verified;
+                : "Profile photos are available after your account is at least one day old.";
         } catch (error) {
             profileStatus.textContent = error.message;
         }
@@ -169,35 +147,6 @@ if (profileForm) {
             button.disabled = false;
         }
     });
-
-    document.querySelector("[data-resend-verification]").addEventListener("click", async (event) => {
-        const button = event.currentTarget;
-        button.disabled = true;
-        profileStatus.textContent = "";
-        try {
-            const result = await requestJson("/api/verification/resend", { method: "POST", body: "{}" });
-            profileStatus.textContent = result.message;
-            if (result.verification_url) appendLink(profileStatus, result.verification_url, "Open verification link");
-        } catch (error) {
-            profileStatus.textContent = error.message;
-        } finally {
-            button.disabled = false;
-        }
-    });
-}
-
-const verificationPage = document.querySelector("[data-verification-page]");
-if (verificationPage) {
-    const result = document.querySelector("[data-verification-result]");
-    const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
-    if (!token) {
-        result.textContent = "This verification link is missing or invalid.";
-    } else {
-        window.history.replaceState(null, "", window.location.pathname);
-        requestJson("/api/verify", { method: "POST", body: JSON.stringify({ token }) })
-            .then((response) => { result.textContent = response.message; })
-            .catch((error) => { result.textContent = error.message; result.classList.add("is-error"); });
-    }
 }
 
 async function loadCurrentUser() {

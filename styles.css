@@ -1396,30 +1396,19 @@ body {
     line-height: 1.2;
 }
 
-.verification-card {
+.profile-account-info {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
     margin-top: 26px;
     padding: 16px;
     background: rgba(255, 255, 255, 0.035);
     border: 1px solid rgba(150, 160, 170, 0.22);
     border-radius: 8px;
-}
-
-.verification-card strong {
-    font-size: 14px;
-}
-
-.verification-card p {
-    margin-top: 5px;
     color: rgb(161, 169, 177);
     font-size: 12px;
     overflow-wrap: anywhere;
 }
 
-.secondary-action,
 .file-action {
     display: inline-flex;
     align-items: center;
@@ -1436,10 +1425,15 @@ body {
     text-decoration: none;
 }
 
-.secondary-action:hover,
 .file-action:hover {
     background: rgba(255, 255, 255, 0.12);
     cursor: pointer;
+}
+
+.file-action[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.55;
+    pointer-events: none;
 }
 
 .profile-form {
@@ -1515,7 +1509,6 @@ body {
 }
 
 .profile-form textarea:focus-visible,
-.secondary-action:focus-visible,
 .file-action:focus-visible {
     outline: 2px solid rgb(230, 234, 237);
     outline-offset: 2px;
@@ -1768,7 +1761,7 @@ body {
         margin: 24px auto;
     }
 
-    .verification-card {
+    .profile-account-info {
         align-items: flex-start;
         flex-direction: column;
     }

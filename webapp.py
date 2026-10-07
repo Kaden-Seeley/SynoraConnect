@@ -3,11 +3,8 @@ import hashlib
 import os
 import re
 import secrets
-import smtplib
-import ssl
 import sqlite3
 from datetime import datetime, timezone
-from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -81,46 +78,6 @@ def set_session(response, user_id):
         secure=secure_cookie, samesite="Lax", path="/",
     )
     return response
-
-
-def issue_verification(user_id, email):
-    token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    now = int(datetime.now(timezone.utc).timestamp())
-    with core.connect_database() as connection:
-        connection.execute("DELETE FROM email_verifications WHERE user_id = ?", (user_id,))
-        connection.execute(
-            "INSERT INTO email_verifications (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
-            (token_hash, user_id, now + 24 * 60 * 60),
-        )
-
-    base_url = os.environ.get("APP_BASE_URL", request.host_url.rstrip("/")).rstrip("/")
-    verification_url = f"{base_url}/verify.html#token={token}"
-    smtp_host = os.environ.get("SMTP_HOST")
-    if not smtp_host:
-        return verification_url, "development"
-
-    message = EmailMessage()
-    message["Subject"] = f"Verify your {core.FULL_BRAND} email"
-    message["From"] = os.environ.get("SMTP_FROM", os.environ.get("SMTP_USERNAME", "noreply@localhost"))
-    message["To"] = email
-    message.set_content(f"Open this link to verify your email address (valid for 24 hours):\n\n{verification_url}\n")
-    try:
-        port = int(os.environ.get("SMTP_PORT", "587"))
-        if os.environ.get("SMTP_USE_SSL") == "1":
-            smtp = smtplib.SMTP_SSL(smtp_host, port, context=ssl.create_default_context(), timeout=15)
-        else:
-            smtp = smtplib.SMTP(smtp_host, port, timeout=15)
-            smtp.starttls(context=ssl.create_default_context())
-        with smtp:
-            username = os.environ.get("SMTP_USERNAME")
-            if username:
-                smtp.login(username, os.environ.get("SMTP_PASSWORD", ""))
-            smtp.send_message(message)
-        return None, "sent"
-    except (OSError, smtplib.SMTPException, ValueError) as error:
-        app.logger.error("Email verification delivery failed: %s", error)
-        return None, "failed"
 
 
 def secure_response(response):
@@ -280,12 +237,7 @@ def api_signup():
             user_id = cursor.lastrowid
     except sqlite3.IntegrityError:
         return jsonify(error="That username or email is already registered."), 409
-    verification_url, delivery = issue_verification(user_id, email)
-    response = jsonify(
-        user={"username": username},
-        verification_url=verification_url,
-        verification_delivery=delivery,
-    )
+    response = jsonify(user={"username": username})
     response.status_code = 201
     return set_session(response, user_id)
 
@@ -355,45 +307,6 @@ def api_logout():
     return response
 
 
-@app.post("/api/verify")
-def api_verify():
-    data = json_body()
-    token = data.get("token", "") if data else ""
-    if not isinstance(token, str) or not token:
-        return jsonify(error="This verification link is invalid or expired."), 400
-    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    now = int(datetime.now(timezone.utc).timestamp())
-    with core.connect_database() as connection:
-        verification = connection.execute(
-            "SELECT user_id, expires_at FROM email_verifications WHERE token_hash = ?", (token_hash,)
-        ).fetchone()
-        if not verification or verification["expires_at"] <= now:
-            return jsonify(error="This verification link is invalid or expired."), 400
-        connection.execute(
-            "UPDATE users SET email_verified_at = ? WHERE id = ?",
-            (datetime.now(timezone.utc).isoformat(timespec="seconds"), verification["user_id"]),
-        )
-        connection.execute("DELETE FROM email_verifications WHERE user_id = ?", (verification["user_id"],))
-    return jsonify(ok=True, message="Email verified. Your account is ready.")
-
-
-@app.post("/api/verification/resend")
-def api_resend_verification():
-    user = current_user()
-    if not user:
-        return jsonify(error="Please sign in to verify your email."), 401
-    with core.connect_database() as connection:
-        account = connection.execute("SELECT email, email_verified_at FROM users WHERE id = ?", (user["id"],)).fetchone()
-    if account["email_verified_at"]:
-        return jsonify(message="Your email is already verified.")
-    verification_url, delivery = issue_verification(user["id"], account["email"])
-    return jsonify(
-        message="Verification email sent." if delivery == "sent" else "Use the local verification link below.",
-        verification_url=verification_url,
-        verification_delivery=delivery,
-    )
-
-
 @app.post("/api/presence")
 def api_presence():
     user = current_user()
@@ -427,12 +340,16 @@ def api_save_profile():
     if not core.bio_is_allowed(bio):
         return jsonify(error="Please choose different wording for your bio."), 400
     with core.connect_database() as connection:
-        existing = connection.execute("SELECT profile_picture FROM users WHERE id = ?", (user["id"],)).fetchone()
+        existing = connection.execute(
+            "SELECT profile_picture, created_at FROM users WHERE id = ?", (user["id"],)
+        ).fetchone()
     picture = existing["profile_picture"]
     avatar_data = data.get("avatar_data")
     if data.get("remove_picture"):
         picture = None
     elif avatar_data is not None:
+        if not core.profile_picture_eligible(existing):
+            return jsonify(error="Profile photos are available after your account is at least one day old."), 403
         if not isinstance(avatar_data, str):
             return jsonify(error="Choose a valid image file."), 400
         try:
@@ -509,6 +426,12 @@ def profile_picture(filename):
     except ValueError:
         abort(404)
     if not target.is_file():
+        abort(404)
+    with core.connect_database() as connection:
+        account = connection.execute(
+            "SELECT created_at FROM users WHERE profile_picture = ?", (filename,)
+        ).fetchone()
+    if not account or not core.profile_picture_eligible(account):
         abort(404)
     return send_file(target, conditional=True, max_age=3600)
 

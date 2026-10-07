@@ -7,12 +7,9 @@ import os
 import re
 import secrets
 import shlex
-import smtplib
-import ssl
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,10 +20,20 @@ from roles import MESSAGE_ROLE_TIERS, SPECIAL_ROLES, primary_color_role, roles_f
 
 
 ROOT = Path(__file__).resolve().parent
-DATABASE = Path(os.environ.get("CHAT_DATABASE", ROOT / "accounts.sqlite3"))
-PROFILE_PICTURES = Path(os.environ.get("PROFILE_PICTURES_DIR", ROOT / "assets" / "profile-pictures")).expanduser().resolve()
-SHORT_BRAND = "Synora"
-FULL_BRAND = "SynoraConnect"
+RENDER_DEPLOYMENT = os.environ.get("RENDER", "").lower() == "true"
+RENDER_DATA = Path("/var/data").resolve()
+DATABASE = Path(
+    os.environ.get(
+        "CHAT_DATABASE",
+        RENDER_DATA / "accounts.sqlite3" if RENDER_DEPLOYMENT else ROOT / "accounts.sqlite3",
+    )
+).expanduser().resolve()
+PROFILE_PICTURES = Path(
+    os.environ.get(
+        "PROFILE_PICTURES_DIR",
+        RENDER_DATA / "profile-pictures" if RENDER_DEPLOYMENT else ROOT / "assets" / "profile-pictures",
+    )
+).expanduser().resolve()
 SESSION_SECONDS = 60 * 60 * 24 * 14
 PRESENCE_SECONDS = 60
 PUBLIC_FILE_EXTENSIONS = {".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".ttf", ".woff", ".woff2", ".ico"}
@@ -125,6 +132,19 @@ def parse_timeout_duration(value):
 
 
 def initialize_database():
+    if RENDER_DEPLOYMENT:
+        if not RENDER_DATA.is_mount():
+            raise RuntimeError(
+                "Render persistent disk is not mounted at /var/data; "
+                "attach the synora-data disk before starting the service."
+            )
+        for path, setting in (
+            (DATABASE, "CHAT_DATABASE"),
+            (PROFILE_PICTURES, "PROFILE_PICTURES_DIR"),
+        ):
+            if not path.is_relative_to(RENDER_DATA):
+                raise RuntimeError(f"{setting} must point inside the persistent /var/data disk on Render.")
+
     DATABASE.parent.mkdir(parents=True, exist_ok=True)
     with connect_database() as connection:
         connection.executescript(
@@ -135,7 +155,6 @@ def initialize_database():
                 email TEXT NOT NULL COLLATE NOCASE UNIQUE,
                 password_hash TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                email_verified_at TEXT,
                 bio TEXT NOT NULL DEFAULT '',
                 profile_picture TEXT,
                 last_seen INTEGER NOT NULL DEFAULT 0
@@ -154,11 +173,6 @@ def initialize_database():
             );
             CREATE INDEX IF NOT EXISTS messages_created_id ON messages(id);
             CREATE INDEX IF NOT EXISTS sessions_expiration ON sessions(expires_at);
-            CREATE TABLE IF NOT EXISTS email_verifications (
-                token_hash TEXT PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                expires_at INTEGER NOT NULL
-            );
             CREATE TABLE IF NOT EXISTS user_moderation (
                 user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 is_banned INTEGER NOT NULL DEFAULT 0,
@@ -187,7 +201,6 @@ def initialize_database():
         )
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(users)")}
         for name, declaration in (
-            ("email_verified_at", "TEXT"),
             ("bio", "TEXT NOT NULL DEFAULT ''"),
             ("profile_picture", "TEXT"),
             ("last_seen", "INTEGER NOT NULL DEFAULT 0"),
@@ -252,19 +265,21 @@ def serialize_message(message):
     return data
 
 
-def serialize_profile(user, now=None, message_count=None):
+def profile_picture_eligible(user, now=None):
     now = now or datetime.now(timezone.utc)
     created_at = datetime.fromisoformat(user["created_at"])
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=timezone.utc)
-    old_enough = now - created_at >= timedelta(days=1)
-    picture_allowed = bool(user["email_verified_at"] and old_enough)
+    return now - created_at >= timedelta(days=1)
+
+
+def serialize_profile(user, now=None, message_count=None):
+    picture_allowed = profile_picture_eligible(user, now)
     picture = user["profile_picture"] if picture_allowed else None
     profile = {
         "username": user["username"],
         "bio": user["bio"],
         "avatar_url": f"/profile-pictures/{picture}" if picture else None,
-        "email_verified": bool(user["email_verified_at"]),
         "photo_eligible": picture_allowed,
         "created_at": user["created_at"],
     }
@@ -547,45 +562,6 @@ class ChatHandler(SimpleHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError):
             return None
 
-    def issue_verification(self, user_id, email):
-        token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-        now = int(datetime.now(timezone.utc).timestamp())
-        with connect_database() as connection:
-            connection.execute("DELETE FROM email_verifications WHERE user_id = ?", (user_id,))
-            connection.execute(
-                "INSERT INTO email_verifications (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
-                (token_hash, user_id, now + 24 * 60 * 60),
-            )
-
-        base_url = os.environ.get("APP_BASE_URL", f"http://127.0.0.1:{self.server.server_port}").rstrip("/")
-        verification_url = f"{base_url}/verify.html#token={token}"
-        smtp_host = os.environ.get("SMTP_HOST")
-        if not smtp_host:
-            return verification_url, "development"
-
-        message = EmailMessage()
-        message["Subject"] = f"Verify your {FULL_BRAND} email"
-        message["From"] = os.environ.get("SMTP_FROM", os.environ.get("SMTP_USERNAME", "noreply@localhost"))
-        message["To"] = email
-        message.set_content(f"Open this link to verify your email address (valid for 24 hours):\n\n{verification_url}\n")
-        try:
-            port = int(os.environ.get("SMTP_PORT", "587"))
-            if os.environ.get("SMTP_USE_SSL") == "1":
-                smtp = smtplib.SMTP_SSL(smtp_host, port, context=ssl.create_default_context(), timeout=15)
-            else:
-                smtp = smtplib.SMTP(smtp_host, port, timeout=15)
-                smtp.starttls(context=ssl.create_default_context())
-            with smtp:
-                username = os.environ.get("SMTP_USERNAME")
-                if username:
-                    smtp.login(username, os.environ.get("SMTP_PASSWORD", ""))
-                smtp.send_message(message)
-            return None, "sent"
-        except (OSError, smtplib.SMTPException, ValueError) as error:
-            self.log_error("Email verification delivery failed: %s", error)
-            return None, "failed"
-
     def current_user(self):
         cookie = SimpleCookie()
         try:
@@ -722,6 +698,12 @@ class ChatHandler(SimpleHTTPRequestHandler):
                 return self.send_error(404)
             if not static_path.is_file():
                 return self.send_error(404)
+            with connect_database() as connection:
+                account = connection.execute(
+                    "SELECT created_at FROM users WHERE profile_picture = ?", (static_path.name,)
+                ).fetchone()
+            if not account or not profile_picture_eligible(account):
+                return self.send_error(404)
         elif parsed.path != "/":
             try:
                 static_path.relative_to(ROOT.resolve())
@@ -777,13 +759,8 @@ class ChatHandler(SimpleHTTPRequestHandler):
                     user_id = cursor.lastrowid
             except sqlite3.IntegrityError:
                 return self.send_json(409, {"error": "That username or email is already registered."})
-            verification_url, delivery = self.issue_verification(user_id, email)
             cookie = self.create_session(user_id)
-            return self.send_json(201, {
-                "user": {"username": username},
-                "verification_url": verification_url,
-                "verification_delivery": delivery,
-            }, {"Set-Cookie": cookie})
+            return self.send_json(201, {"user": {"username": username}}, {"Set-Cookie": cookie})
 
         if path == "/api/login":
             identifier = str(data.get("identifier", "")).strip()
@@ -811,41 +788,6 @@ class ChatHandler(SimpleHTTPRequestHandler):
                 connection.execute("UPDATE users SET last_seen = ? WHERE id = ?", (int(datetime.now(timezone.utc).timestamp()), user["id"]))
             cookie = self.create_session(user["id"])
             return self.send_json(200, {"user": {"username": user["username"]}}, {"Set-Cookie": cookie})
-
-        if path == "/api/verify":
-            token = data.get("token", "")
-            if not isinstance(token, str) or not token:
-                return self.send_json(400, {"error": "This verification link is invalid or expired."})
-            token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
-            now = int(datetime.now(timezone.utc).timestamp())
-            with connect_database() as connection:
-                verification = connection.execute(
-                    "SELECT user_id, expires_at FROM email_verifications WHERE token_hash = ?",
-                    (token_hash,),
-                ).fetchone()
-                if not verification or verification["expires_at"] <= now:
-                    return self.send_json(400, {"error": "This verification link is invalid or expired."})
-                connection.execute(
-                    "UPDATE users SET email_verified_at = ? WHERE id = ?",
-                    (datetime.now(timezone.utc).isoformat(timespec="seconds"), verification["user_id"]),
-                )
-                connection.execute("DELETE FROM email_verifications WHERE user_id = ?", (verification["user_id"],))
-            return self.send_json(200, {"ok": True, "message": "Email verified. Your account is ready."})
-
-        if path == "/api/verification/resend":
-            user = self.current_user()
-            if not user:
-                return self.send_json(401, {"error": "Please sign in to verify your email."})
-            with connect_database() as connection:
-                account = connection.execute("SELECT email, email_verified_at FROM users WHERE id = ?", (user["id"],)).fetchone()
-            if account["email_verified_at"]:
-                return self.send_json(200, {"message": "Your email is already verified."})
-            verification_url, delivery = self.issue_verification(user["id"], account["email"])
-            return self.send_json(200, {
-                "message": "Verification email sent." if delivery == "sent" else "Use the local verification link below.",
-                "verification_url": verification_url,
-                "verification_delivery": delivery,
-            })
 
         if path == "/api/presence":
             user = self.current_user()
@@ -880,12 +822,18 @@ class ChatHandler(SimpleHTTPRequestHandler):
             if not bio_is_allowed(bio):
                 return self.send_json(400, {"error": "Please choose different wording for your bio."})
             with connect_database() as connection:
-                existing = connection.execute("SELECT profile_picture FROM users WHERE id = ?", (user["id"],)).fetchone()
+                existing = connection.execute(
+                    "SELECT profile_picture, created_at FROM users WHERE id = ?", (user["id"],)
+                ).fetchone()
             picture = existing["profile_picture"]
             avatar_data = data.get("avatar_data")
             if data.get("remove_picture"):
                 picture = None
             elif avatar_data is not None:
+                if not profile_picture_eligible(existing):
+                    return self.send_json(403, {
+                        "error": "Profile photos are available after your account is at least one day old."
+                    })
                 if not isinstance(avatar_data, str):
                     return self.send_json(400, {"error": "Choose a valid image file."})
                 try:
